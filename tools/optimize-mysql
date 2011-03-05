@@ -1,0 +1,42 @@
+#!/usr/bin/perl -w
+use strict;
+use lib 'lib', '../lib';
+use lib 'extlib', '../extlib';
+require MT;
+require MT::Object;
+my $mt  = MT->new() or die MT->errstr;
+my $driver = MT->config( 'ObjectDriver' );
+return if $driver ne 'DBI::mysql';
+my @models;
+my $model = MT->registry( 'object_types' );
+for my $m ( keys %$model ) {
+    if ( $m !~ /\Q.\E/ ) {
+        push @models, $m;
+    }
+}
+my $do;
+my $handle = MT::Object->driver->rw_handle;
+for my $model ( @models ) {
+    next if $model eq 'file';
+    if ( my $class = MT->model( $model ) ) {
+        my $table = 'mt_' . $model;
+        my $sql = 'OPTIMIZE TABLE `' . $table . '`';
+        if ( $handle->do( $sql ) ) {
+            $do = 1;
+        }
+        if ( my $meta = $class->has_meta ) {
+            my $sql = 'OPTIMIZE TABLE `' . $table . '_meta`';
+            if ( $handle->do( $sql ) ) {
+                $do = 1;
+            }
+        }
+        if ( $class->isa( 'MT::Revisable' ) ) {
+            my $sql = 'OPTIMIZE TABLE `' . $table . '_rev`';
+            if ( $handle->do( $sql ) ) {
+                $do = 1;
+            }
+        }
+    }
+}
+MT->log( 'MySQL optimized successfully.' ) if $do;
+1;
